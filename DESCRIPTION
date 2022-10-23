@@ -20,7 +20,10 @@ Depends:
   shinyalert,
   shinyjs,
   miniUI,
-  yaml
+  yaml,
+  rgl,
+  mmand,
+  fsbrain
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.2.1

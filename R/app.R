@@ -1,5 +1,7 @@
 #' @export
 prep_stack <- function(width = 1200, height = 800) {
+  options(rgl.useNULL = TRUE)
+
   ui <- miniUI::miniPage(
     shiny::tags$head(
       shiny::tags$style(
@@ -44,9 +46,18 @@ prep_stack <- function(width = 1200, height = 800) {
           8,
 
           shiny::div(
+            id = "2d-panel",
             class = "main-panel",
             shinyWidgets::panel(
               shiny::plotOutput("display_x", height = 0.65 * height, width = "100%")
+            )
+          ),
+
+          shiny::div(
+            id = "3d-panel",
+            class = "main-panel",
+            shinyWidgets::panel(
+              rgl::rglwidgetOutput("display3d_x", height = 0.65 * height, width = "100%")
             )
           ),
 
@@ -165,9 +176,11 @@ prep_stack <- function(width = 1200, height = 800) {
             shinyWidgets::verticalTabPanel(
               title = "6",
               box_height = "100%",
-              shiny::p("Export final result", class = "module-title"),
+              shiny::p("Preview & export", class = "module-title"),
               shiny::hr(),
-              shinyFiles::shinySaveButton("export_x", "Export", "Export results to...",
+              shiny::actionButton("threed_x", "Render 3D preview", width = "100%"),
+              shiny::hr(),
+              shinyFiles::shinySaveButton("export_x", "Export final result", "Export results to...",
                                           filetype = list(stack = c("tif", "tiff")),
                                           class = "fullWidth"),
               shiny::hr(),
@@ -204,6 +217,7 @@ prep_stack <- function(width = 1200, height = 800) {
     mask <- shiny::reactiveVal(NULL)
     mods <- shiny::reactiveVal(NULL)
     D <- shiny::reactiveVal(NULL)
+    preview3d <- shiny::reactiveVal(NULL)
 
     # LOAD MODULE
     shinyFiles::shinyFileChoose(input, "stackFile_x", roots = volumes, session = session,
@@ -212,8 +226,9 @@ prep_stack <- function(width = 1200, height = 800) {
     shiny::observeEvent(input$stackFile_x, {
       path <- shinyFiles::parseFilePaths(volumes, input$stackFile_x)
       if (nrow(path) > 0) {
-        shiny::showNotification("Loading stack in memory.", id = "load", duration = NULL)
-        pbapply::pboptions(title = "Loading...")
+        shiny::showNotification("Loading stack in memory.", id = "load",
+                                duration = NULL, type = "error")
+        pbapply::pboptions(title = "Converting stack...")
         toggleAll("OFF")
         if (grepl(".mat", path$datapath)) {
           stack(read_mat_stack(path$datapath))
@@ -229,7 +244,6 @@ prep_stack <- function(width = 1200, height = 800) {
     # CONTAINER MODULE
     shiny::observeEvent(input$container_x, {
       if (length(stack()) > 0) {
-        shiny::showNotification("Looking for container.", id = "process", duration = NULL)
         pbapply::pboptions(title = "Processing...")
         toggleAll("OFF")
         circ <- find_container(stack(), input$slicer_x - 10, input$slicer_x + 10)
@@ -332,6 +346,42 @@ prep_stack <- function(width = 1200, height = 800) {
       }
     })
 
+    # 3D PREVIEW MODULE
+    shiny::observeEvent(input$threed_x, {
+      if (length(stack()) > 0 & length(D()) > 0) {
+        pbapply::pboptions(title = "Processing...")
+        toggleAll("OFF")
+        ds <- 4
+        slices <- seq(input$slicer2_x[1], input$slicer2_x[2], ds)
+        nr <- floor(nrow(stack()[[1]]) / ds)
+        nc <- floor(ncol(stack()[[1]]) / ds)
+        ns <- length(slices)
+
+        pbapply::pblapply(1:ns, function(j) {
+          out <- Rvision::cloneImage(stack()[[slices[j]]])
+          i <- which(mods()[, 1] == slices[j])
+          BASE <- (mods()[i, 2] * exp(-mods()[i, 3] * D())) + mods()[i, 4]
+          Rvision::subtract(out, Rvision::image(BASE), "self")
+          Rvision::multiply(out, mask(), "self")
+          Rvision::resize(out < input$threshold_x, nr, nc)[][,,1]
+        }) -> vol
+        vol <- simplify2array(vol)
+
+        dt <- mmand::distanceTransform(vol)
+        tmp <- dt == 1
+        tmp[1, , ] <- dt[1, , ] > 0
+        tmp[nr, , ] <- dt[nr, , ] > 0
+        tmp[, 1, ] <- dt[, 1, ] > 0
+        tmp[, nc, ] <- dt[, nc, ] > 0
+        tmp[, , 1] <- dt[, , 1] > 0
+        tmp[, , ns] <- dt[, , ns] > 0
+        tmp[tmp == 0] <- NA
+        preview3d(tmp)
+
+        toggleAll("ON")
+      }
+    })
+
     # SAVE MODULE
     shinyFiles::shinyFileSave(input, "export_x", roots = volumes, session = session,
                               defaultRoot = defaultRoot(), defaultPath = defaultPath())
@@ -340,8 +390,8 @@ prep_stack <- function(width = 1200, height = 800) {
       path <- shinyFiles::parseSavePath(volumes, input$export_x)
 
       if (nrow(path) > 0) {
-        shiny::showNotification("Saving processed stack.", id = "save", duration = NULL)
-        pbapply::pboptions(title = "Saving...")
+        shiny::showNotification("Saving processed stack.", id = "save",
+                                duration = NULL, type = "error")
         toggleAll("OFF")
         circ <- c(input$containerx_x, input$containery_x, input$containerr_x)
         Rvision::writeMulti(path$datapath,
@@ -422,7 +472,7 @@ prep_stack <- function(width = 1200, height = 800) {
           }
 
           plot(to_display)
-        } else if (input$main == "5" | input$main == "6") {
+        } else if (input$main == "5" | input$main == "7") {
           to_display <- Rvision::cloneImage(stack()[[input$slicer3_x]])
 
           if (length(D()) > 0) {
@@ -431,7 +481,7 @@ prep_stack <- function(width = 1200, height = 800) {
             Rvision::subtract(to_display, Rvision::image(BASE), "self")
             Rvision::multiply(to_display, mask(), "self")
             Rvision::multiply(to_display, (to_display > 0) / 255, "self")
-            ct <- Rvision::findContours(to_display > input$threshold_x, mode = "list", method = "none")
+            ct <- Rvision::findContours(to_display >= input$threshold_x, mode = "list", method = "none")
             Rvision::changeBitDepth(to_display, "8U", 255 / max(to_display)[1], "self")
             Rvision::changeColorSpace(to_display, "BGR", "self")
             Rvision::drawCircle(to_display, ct$contours[, 2], ct$contours[, 3], 1, "green", -1)
@@ -444,26 +494,60 @@ prep_stack <- function(width = 1200, height = 800) {
       }
     })
 
+    output$display3d_x <- rgl::renderRglwidget({
+      try(close3d(), silent = TRUE)
+
+      if (length(preview3d()) > 0) {
+        shiny::showNotification("Rendering preview.", id = "render3d",
+                                duration = NULL, type = "error")
+        fsbrain::volvis.voxels(preview3d(), voxelcol = "gray50", specular = "black")
+        shiny::removeNotification(id = "render3d")
+      }
+
+      rgl::box3d()
+      rgl::bg3d(color = "#dfe5ed")
+      rgl::rgl.viewpoint(theta = 0, phi = 0, fov = 45)
+      rglwidget()
+    })
+
     # OTHER
     shiny::observeEvent(input$main, {
-      if (length(stack()) == 0) {
+      if (input$main == "3") {
+        shinyjs::hide("3d-panel")
+        shinyjs::hide("slicer")
+        shinyjs::hide("slicer3")
+        if (length(stack()) == 0) {
+          shinyjs::hide("slicer2")
+        } else {
+          shinyjs::show("slicer2", anim = TRUE, animType = "fade")
+        }
+        shinyjs::show("2d-panel", anim = TRUE, animType = "fade")
+      } else if (input$main == "4" | input$main == "5") {
+        shinyjs::hide("3d-panel")
+        shinyjs::hide("slicer")
+        shinyjs::hide("slicer2")
+        if (length(stack()) == 0) {
+          shinyjs::hide("slicer3")
+        } else {
+          shinyjs::show("slicer3", anim = TRUE, animType = "fade")
+        }
+        shinyjs::show("2d-panel", anim = TRUE, animType = "fade")
+      } else if (input$main == "6") {
+        shinyjs::hide("2d-panel")
         shinyjs::hide("slicer")
         shinyjs::hide("slicer2")
         shinyjs::hide("slicer3")
+        shinyjs::show("3d-panel")
       } else {
-        if (input$main == "3") {
+        shinyjs::hide("3d-panel")
+        shinyjs::hide("slicer2")
+        shinyjs::hide("slicer3")
+        if (length(stack()) == 0) {
           shinyjs::hide("slicer")
-          shinyjs::hide("slicer3")
-          shinyjs::show("slicer2", anim = TRUE, animType = "fade")
-        } else if (input$main == "4" | input$main == "5") {
-          shinyjs::hide("slicer")
-          shinyjs::hide("slicer2")
-          shinyjs::show("slicer3", anim = TRUE, animType = "fade")
         } else {
-          shinyjs::hide("slicer2")
-          shinyjs::hide("slicer3")
           shinyjs::show("slicer", anim = TRUE, animType = "fade")
         }
+        shinyjs::show("2d-panel", anim = TRUE, animType = "fade")
       }
     })
 

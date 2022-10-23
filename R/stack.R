@@ -19,7 +19,18 @@ read_mat_stack <- function(file, name = "reconstruction3D") {
 
 #' @export
 read_stack <- function(file) {
-  Rvision::readMulti(file)
+  if (shiny::isRunning()) {
+    pbapply::pboptions(type = "shiny")
+  } else {
+    pbapply::pboptions(type = if (interactive()) "timer" else "none")
+  }
+
+  stack <- Rvision::readMulti(file)
+  pbapply::pblapply(stack, function(x) {
+    Rvision::changeBitDepth(x, "32F", 1, "self")
+  })
+
+  stack
 }
 
 
