@@ -1,5 +1,5 @@
 #' @export
-prep_stack <- function(width = 1200, height = 800) {
+prep_stack <- function(width = 1200, height = 1e6) {
   options(rgl.useNULL = TRUE)
 
   ui <- miniUI::miniPage(
@@ -28,6 +28,7 @@ prep_stack <- function(width = 1200, height = 800) {
 
           .main-panel {
             margin-top: 20px;
+            text-align: center;
             width: 100%;
           }
 
@@ -49,7 +50,7 @@ prep_stack <- function(width = 1200, height = 800) {
             id = "2d-panel",
             class = "main-panel",
             shinyWidgets::panel(
-              shiny::plotOutput("display_x", height = 0.65 * height, width = "100%")
+              shiny::plotOutput("display_x", height = "calc(100vh - 285px)", width = "100%")
             )
           ),
 
@@ -57,7 +58,7 @@ prep_stack <- function(width = 1200, height = 800) {
             id = "3d-panel",
             class = "main-panel",
             shinyWidgets::panel(
-              rgl::rglwidgetOutput("display3d_x", height = 0.65 * height, width = "100%")
+              rgl::rglwidgetOutput("display3d_x", height = "calc(100vh - 285px)", width = "100%")
             )
           ),
 
@@ -472,7 +473,7 @@ prep_stack <- function(width = 1200, height = 800) {
           }
 
           plot(to_display)
-        } else if (input$main == "5" | input$main == "7") {
+        } else if (input$main == "5") {
           to_display <- Rvision::cloneImage(stack()[[input$slicer3_x]])
 
           if (length(D()) > 0) {
@@ -537,7 +538,7 @@ prep_stack <- function(width = 1200, height = 800) {
         shinyjs::hide("slicer")
         shinyjs::hide("slicer2")
         shinyjs::hide("slicer3")
-        shinyjs::show("3d-panel")
+        shinyjs::show("3d-panel", anim = TRUE, animType = "fade")
       } else {
         shinyjs::hide("3d-panel")
         shinyjs::hide("slicer2")
