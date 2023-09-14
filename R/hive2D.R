@@ -171,7 +171,6 @@ hive2D <- function(...) {
           theImage <<- Rvision::readFrame(theVideo, 1)
           theMask <<- Rvision::zeros(nrow(theImage), ncol(theImage), 1)
           theRed <<- Rvision::zeros(nrow(theImage), ncol(theImage), 1)
-          theCanny <<- Rvision::zeros(nrow(theImage), ncol(theImage), 1)
           theBW <<- Rvision::zeros(nrow(theImage), ncol(theImage), 1)
           sx <- c((ncol(theImage) / 2) - (0.4 * nrow(theImage)),
                   (ncol(theImage) / 2) + (0.4 * nrow(theImage)))
@@ -215,15 +214,25 @@ hive2D <- function(...) {
           step <- input$stepSize_x
         }
 
+        shiny::isolate({
+          if (!is.null(input$videoPos_x)) {
+            val <- input$videoPos_x
+          } else {
+            val <- input$rangePos_x[1]
+          }
+
+        })
+
         shiny::tags$div(
           class = "col-sm-12 vrtc-tab-panel-container tabbable",
           style = "margin-top: 10px;",
           shiny::tags$div(
-            style = "margin-top: 20px; margin-left: 20px; margin-right: 70px;",
-            shiny::sliderInput("videoPos_x", "Frame", width = "100%", step = step,
-                               value = input$rangePos_x[1],
+            style = "margin-top: 20px; margin-left: 20px; margin-right: 70px; margin-bottom: 10px;",
+            shiny::sliderInput("videoPos_x", "Frame:", width = "100%", step = step,
+                               value = val,
                                min = input$rangePos_x[1],
-                               max = input$rangePos_x[2])
+                               max = input$rangePos_x[2]),
+            shiny::tags$div(style = "font-weight: bold;", shiny::textOutput("timer"))
           )
         )
       }
@@ -330,6 +339,18 @@ hive2D <- function(...) {
 
     shiny::observeEvent(input$videoPos_x, {
       refreshImage(refreshImage() + 1)
+    })
+
+    output$timer <- shiny::renderText({
+      if (!is.null(input$videoPos_x)) {
+        fr <- round(input$videoPos_x %% Rvision::fps(theVideo))
+        tot_sec <- input$videoPos_x %/% Rvision::fps(theVideo)
+        hours <- tot_sec %/% 3600
+        mins <- (tot_sec - hours * 3600) %/% 60
+        secs <- tot_sec %% 60
+        paste0("Time: ", sprintf("%02d", hours), ":", sprintf("%02d", mins), ":",
+               sprintf("%02d", secs), ".", sprintf("%02d", fr))
+      }
     })
 
     shiny::observeEvent(plotly::event_data("plotly_relayout"), {
