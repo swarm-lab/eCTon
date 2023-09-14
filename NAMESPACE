@@ -3,6 +3,7 @@
 export(find_container)
 export(find_global_treshold)
 export(find_usable_slices)
+export(hive2D)
 export(make_clean_stack)
 export(make_container_mask)
 export(prep_stack)
