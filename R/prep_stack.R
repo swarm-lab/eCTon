@@ -339,9 +339,17 @@ prep_stack <- function(width = 1200, height = 1e6) {
         pbapply::pboptions(title = "Processing...")
         toggleAll("OFF")
         circ <- c(input$containerx_x, input$containery_x, input$containerr_x)
-        th <- find_global_treshold(stack(), circ, mods(), mask(),
-                                   n = input$sample_x,
-                                   methods = input$methods_x)
+
+        if (is.null(mods())) {
+          th <- find_global_treshold(stack(), circ, input$slicer2_x, mask(),
+                                     n = input$sample_x,
+                                     methods = input$methods_x)
+        } else {
+          th <- find_global_treshold(stack(), circ, mods(), mask(),
+                                     n = input$sample_x,
+                                     methods = input$methods_x)
+        }
+
         shiny::updateNumericInput(session, "threshold_x", value = th)
         toggleAll("ON")
       }
@@ -349,7 +357,7 @@ prep_stack <- function(width = 1200, height = 1e6) {
 
     # 3D PREVIEW MODULE
     shiny::observeEvent(input$threed_x, {
-      if (length(stack()) > 0 & length(D()) > 0) {
+      if (length(stack()) > 0) {
         pbapply::pboptions(title = "Processing...")
         toggleAll("OFF")
         ds <- 4
@@ -360,9 +368,13 @@ prep_stack <- function(width = 1200, height = 1e6) {
 
         pbapply::pblapply(1:ns, function(j) {
           out <- Rvision::cloneImage(stack()[[slices[j]]])
-          i <- which(mods()[, 1] == slices[j])
-          BASE <- (mods()[i, 2] * exp(-mods()[i, 3] * D())) + mods()[i, 4]
-          Rvision::subtract(out, Rvision::image(BASE), "self")
+
+          if (length(D()) > 0) {
+            i <- which(mods()[, 1] == slices[j])
+            BASE <- (mods()[i, 2] * exp(-mods()[i, 3] * D())) + mods()[i, 4]
+            Rvision::subtract(out, Rvision::image(BASE), "self")
+          }
+
           Rvision::multiply(out, mask(), "self")
           Rvision::resize(out < input$threshold_x, nr, nc)[][,,1]
         }) -> vol
@@ -395,8 +407,20 @@ prep_stack <- function(width = 1200, height = 1e6) {
                                 duration = NULL, type = "error")
         toggleAll("OFF")
         circ <- c(input$containerx_x, input$containery_x, input$containerr_x)
-        Rvision::writeMulti(path$datapath,
-                            make_clean_stack(stack(), mask(), mods(), circ, input$threshold_x))
+
+        if (is.null(mods())) {
+          Rvision::writeMulti(path$datapath,
+                              make_clean_stack(stack(), mask(), input$slicer2_x,
+                                               circ, input$threshold_x))
+        } else {
+          Rvision::writeMulti(path$datapath,
+                              make_clean_stack(stack(), mask(), mods(),
+                                               circ, input$threshold_x))
+        }
+
+
+
+
 
         yaml::write_yaml(yaml::as.yaml(list(file = stackfile(),
                                             bottom_slice = input$slicer2_x[1],
@@ -468,10 +492,10 @@ prep_stack <- function(width = 1200, height = 1e6) {
             i <- which(mods()[, 1] == input$slicer3_x)
             BASE <- (mods()[i, 2] * exp(-mods()[i, 3] * D())) + mods()[i, 4]
             Rvision::subtract(to_display, Rvision::image(BASE), "self")
-            Rvision::multiply(to_display, mask(), "self")
-            Rvision::multiply(to_display, (to_display > 0) / 255, "self")
           }
 
+          Rvision::multiply(to_display, mask(), "self")
+          Rvision::multiply(to_display, (to_display > 0) / 255, "self")
           plot(to_display)
         } else if (input$main == "5") {
           to_display <- Rvision::cloneImage(stack()[[input$slicer3_x]])
@@ -480,14 +504,14 @@ prep_stack <- function(width = 1200, height = 1e6) {
             i <- which(mods()[, 1] == input$slicer3_x)
             BASE <- (mods()[i, 2] * exp(-mods()[i, 3] * D())) + mods()[i, 4]
             Rvision::subtract(to_display, Rvision::image(BASE), "self")
-            Rvision::multiply(to_display, mask(), "self")
-            Rvision::multiply(to_display, (to_display > 0) / 255, "self")
-            ct <- Rvision::findContours(to_display >= input$threshold_x, mode = "list", method = "none")
-            Rvision::changeBitDepth(to_display, "8U", 255 / max(to_display)[1], "self")
-            Rvision::changeColorSpace(to_display, "BGR", "self")
-            Rvision::drawCircle(to_display, ct$contours[, 2], ct$contours[, 3], 1, "green", -1)
           }
 
+          Rvision::multiply(to_display, mask(), "self")
+          Rvision::multiply(to_display, (to_display > 0) / 255, "self")
+          ct <- Rvision::findContours(to_display >= input$threshold_x, mode = "list", method = "none")
+          Rvision::changeBitDepth(to_display, "8U", 255 / max(to_display)[1], "self")
+          Rvision::changeColorSpace(to_display, "BGR", "self")
+          Rvision::drawCircle(to_display, ct$contours[, 2], ct$contours[, 3], 1, "green", -1)
           plot(to_display)
         }
       } else {
@@ -507,7 +531,7 @@ prep_stack <- function(width = 1200, height = 1e6) {
 
       rgl::box3d()
       rgl::bg3d(color = "#dfe5ed")
-      rgl::rgl.viewpoint(theta = 0, phi = 0, fov = 45)
+      rgl::view3d(theta = 0, phi = 0, fov = 45)
       rglwidget()
     })
 

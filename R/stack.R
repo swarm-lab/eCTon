@@ -130,21 +130,31 @@ find_global_treshold <- function(stack, circ, mods, mask, n = 5000,
     pbapply::pboptions(type = if (interactive()) "timer" else "none")
   }
 
-  nc <- ncol(stack[[1]])
-  nr <- nrow(stack[[1]])
-  D <- circ[3] - sqrt((matrix(1:nc, ncol = nc, nrow = nr, byrow = TRUE) - circ[1]) ^ 2 +
-                        (matrix(1:nr, ncol = nc, nrow = nr) - circ[2]) ^ 2)
-  dim(D) <- c(dim(D), 1)
+  if (is.list(mods)) {
+    nc <- ncol(stack[[1]])
+    nr <- nrow(stack[[1]])
+    D <- circ[3] - sqrt((matrix(1:nc, ncol = nc, nrow = nr, byrow = TRUE) - circ[1]) ^ 2 +
+                          (matrix(1:nr, ncol = nc, nrow = nr) - circ[2]) ^ 2)
+    dim(D) <- c(dim(D), 1)
 
-  nz <- Rvision::findNonZero(mask)
+    nz <- Rvision::findNonZero(mask)
 
-  pbapply::pbsapply(1:nrow(mods), function(i) {
-    id <- sample(1:nrow(nz), n)
-    tmp <- Rvision::cloneImage(stack[[mods[i, 1]]])
-    BASE <- (mods[i, 2] * exp(-mods[i, 3] * D)) + mods[i, 4]
-    Rvision::subtract(tmp, Rvision::image(BASE), "self")
-    Rvision::pget(tmp, nz[id, 1], nz[id, 2])
-  }) -> smp
+    pbapply::pbsapply(1:nrow(mods), function(i) {
+      id <- sample(1:nrow(nz), n)
+      tmp <- Rvision::cloneImage(stack[[mods[i, 1]]])
+      BASE <- (mods[i, 2] * exp(-mods[i, 3] * D)) + mods[i, 4]
+      Rvision::subtract(tmp, Rvision::image(BASE), "self")
+      Rvision::pget(tmp, nz[id, 1], nz[id, 2])
+    }) -> smp
+  } else {
+    nz <- Rvision::findNonZero(mask)
+
+    pbapply::pbsapply(mods[1]:mods[2], function(i) {
+      id <- sample(1:nrow(nz), n)
+      tmp <- Rvision::cloneImage(stack[[i]])
+      Rvision::pget(tmp, nz[id, 1], nz[id, 2])
+    }) -> smp
+  }
 
   dim(smp) <- c(dim(smp), 1)
   smp <- Rvision::image(smp)
@@ -165,19 +175,29 @@ make_clean_stack <- function(stack, mask, mods, circ, th = Inf) {
     pbapply::pboptions(type = if (interactive()) "timer" else "none")
   }
 
-  nc <- ncol(stack[[1]])
-  nr <- nrow(stack[[1]])
-  D <- circ[3] - sqrt((matrix(1:nc, ncol = nc, nrow = nr, byrow = TRUE) - circ[1]) ^ 2 +
-                        (matrix(1:nr, ncol = nc, nrow = nr) - circ[2]) ^ 2)
-  dim(D) <- c(dim(D), 1)
+  if (is.list(mods)) {
+    nc <- ncol(stack[[1]])
+    nr <- nrow(stack[[1]])
+    D <- circ[3] - sqrt((matrix(1:nc, ncol = nc, nrow = nr, byrow = TRUE) - circ[1]) ^ 2 +
+                          (matrix(1:nr, ncol = nc, nrow = nr) - circ[2]) ^ 2)
+    dim(D) <- c(dim(D), 1)
 
-  pbapply::pblapply(1:nrow(mods), function(i) {
-    tmp <- Rvision::cloneImage(stack[[mods[i, 1]]])
-    BASE <- (mods[i, 2] * exp(-mods[i, 3] * D)) + mods[i, 4]
-    Rvision::subtract(tmp, image(BASE), "self")
-    Rvision::multiply(tmp, mask, "self")
-    Rvision::multiply(tmp, (tmp > 0) / 255, "self")
-    Rvision::multiply(tmp, (tmp >= th) / 255, "self")
-    tmp
-  })
+    pbapply::pblapply(1:nrow(mods), function(i) {
+      tmp <- Rvision::cloneImage(stack[[mods[i, 1]]])
+      BASE <- (mods[i, 2] * exp(-mods[i, 3] * D)) + mods[i, 4]
+      Rvision::subtract(tmp, image(BASE), "self")
+      Rvision::multiply(tmp, mask, "self")
+      Rvision::multiply(tmp, (tmp > 0) / 255, "self")
+      Rvision::multiply(tmp, (tmp >= th) / 255, "self")
+      tmp
+    })
+  } else {
+    pbapply::pblapply(mods[1]:mods[2], function(i) {
+      tmp <- Rvision::cloneImage(stack[[i]])
+      Rvision::multiply(tmp, mask, "self")
+      Rvision::multiply(tmp, (tmp > 0) / 255, "self")
+      Rvision::multiply(tmp, (tmp >= th) / 255, "self")
+      tmp
+    })
+  }
 }
